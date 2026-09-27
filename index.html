@@ -42,15 +42,62 @@
       </div>
     </section>
 
-    <section id="account-ready" class="screen auth-screen" hidden>
-      <div class="auth-card status-card">
+    <section id="loading" class="screen auth-screen" hidden>
+      <div class="loading-card">
         <div class="brand-mark brand-mark--small">RAIN</div>
-        <p class="eyebrow">SERVER SAVE</p>
-        <h2>계정과 세이브가 연결되었습니다.</h2>
-        <p id="account-email" class="account-email"></p>
-        <p id="save-status" class="save-status">세이브를 확인하고 있습니다…</p>
-        <button id="logout-button" class="text-button text-button--bordered" type="button">로그아웃</button>
+        <p id="loading-message">세이브를 불러오는 중…</p>
       </div>
+    </section>
+
+    <section id="pub-setup" class="screen auth-screen" hidden>
+      <div class="auth-card">
+        <p class="eyebrow">NEW PUB</p>
+        <h2>내 펍의 이름을 정해주세요.</h2>
+        <form id="pub-name-form">
+          <label>
+            <span>펍 이름</span>
+            <input id="pub-name" maxlength="20" minlength="2" autocomplete="off" placeholder="예: RAIN Poker Club" required />
+          </label>
+          <p id="pub-name-status" class="auth-status" role="status"></p>
+          <button id="pub-name-submit" class="primary-button" type="submit">이 이름으로 시작</button>
+        </form>
+      </div>
+    </section>
+
+    <section id="game" class="screen game-screen" hidden>
+      <div id="pub-game" class="pub-game" aria-label="홀덤펍 게임 맵"></div>
+
+      <header class="game-hud">
+        <div class="hud-left">
+          <strong id="hud-pub-name">RAIN POKER PUB</strong>
+          <span id="hud-calendar">1주차 · 월요일</span>
+        </div>
+        <div class="hud-right">
+          <strong id="hud-cash">0G</strong>
+          <span id="hud-status">영업 전</span>
+        </div>
+      </header>
+
+      <div id="save-indicator" class="save-indicator">저장됨</div>
+
+      <div id="system-message" class="system-message" role="status">
+        먼저 포커 테이블을 준비해볼까요? 메뉴를 눌러보세요.
+      </div>
+
+      <button id="start-business" class="start-business-button" type="button" hidden>
+        영업 시작
+      </button>
+
+      <button id="floating-menu" class="floating-menu-button" type="button" aria-label="게임 메뉴">
+        ☰
+        <span>메뉴</span>
+      </button>
+
+      <div id="sheet-backdrop" class="sheet-backdrop" hidden></div>
+      <aside id="action-sheet" class="action-sheet" hidden aria-live="polite">
+        <div class="sheet-handle"></div>
+        <div id="sheet-content"></div>
+      </aside>
     </section>
   </main>
 
