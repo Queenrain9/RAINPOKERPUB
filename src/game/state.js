@@ -22,6 +22,7 @@ export function createInitialPubState(pubName) {
     },
     economy: {
       cash: 0,
+      lifetimeRevenue: 0,
     },
     calendar: {
       week: 1,
@@ -30,6 +31,10 @@ export function createInitialPubState(pubName) {
     },
     business: {
       status: "closed",
+      todayStats: {
+        sessions: 0,
+        revenue: 0,
+      },
     },
     map: {
       width: MAP_SPEC.width,
