@@ -1,6 +1,9 @@
+import { BALANCE } from "./balance.js";
 import {
-  TABLE_MODULE,
+  completeGuestSession,
+  ensureActiveGuestSessions,
   getTableGeometry,
+  removeDepartedGuest,
   seatGuest,
   spawnGuest,
 } from "./engine.js";
@@ -13,27 +16,54 @@ export class GameScene extends Phaser.Scene {
     this.placementMode = null;
     this.mapMetrics = null;
     this.guestSprites = new Map();
+    this.sessionTimers = new Map();
+    this.activeMover = null;
+    this.guestTimer = null;
   }
 
   create() {
     this.cameras.main.setBackgroundColor("#15110d");
     this.input.on("pointerdown", (pointer) => this.handlePointer(pointer));
     this.scale.on("resize", () => this.renderAll());
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.cleanupRuntime());
+
+    const normalized = ensureActiveGuestSessions(this.state);
+    if (normalized !== this.state) {
+      this.state = normalized;
+      this.callbacks.onStateChange?.(this.getState(), "runtime_normalized");
+    }
+
     this.renderAll();
+    this.syncSessionTimers();
+    this.resumeGuestMovement();
 
     if (this.state.business.status === "open") {
-      const walkingGuests = this.state.guests.filter((guest) => guest.state === "walking");
-      walkingGuests.forEach((guest, index) => {
-        this.time.delayedCall(80 + index * 120, () => this.animateGuestToSeat(guest.id));
-      });
       this.startGuestLoop();
     }
   }
 
+  cleanupRuntime() {
+    this.clearSessionTimers();
+    if (this.guestTimer) {
+      this.guestTimer.remove(false);
+      this.guestTimer = null;
+    }
+    this.activeMover = null;
+  }
+
   setState(nextState) {
     const wasOpen = this.state.business.status === "open";
+
+    this.tweens.killAll();
+    this.activeMover = null;
+    this.clearSessionTimers();
+
     this.state = JSON.parse(JSON.stringify(nextState));
+    this.state = ensureActiveGuestSessions(this.state);
+
     this.renderAll();
+    this.syncSessionTimers();
+    this.resumeGuestMovement();
 
     if (!wasOpen && this.state.business.status === "open") {
       this.startGuestLoop();
@@ -52,9 +82,9 @@ export class GameScene extends Phaser.Scene {
   startGuestLoop() {
     if (this.guestTimer) return;
 
-    this.time.delayedCall(1200, () => this.trySpawnGuest());
+    this.time.delayedCall(BALANCE.guestArrival.firstDelayMs, () => this.trySpawnGuest());
     this.guestTimer = this.time.addEvent({
-      delay: 4500,
+      delay: BALANCE.guestArrival.repeatDelayMs,
       loop: true,
       callback: () => this.trySpawnGuest(),
     });
@@ -65,10 +95,79 @@ export class GameScene extends Phaser.Scene {
     if (next === this.state || next.guests.length === this.state.guests.length) return;
 
     this.state = next;
-    const guest = this.state.guests[this.state.guests.length - 1];
     this.renderAll();
     this.callbacks.onStateChange?.(this.getState(), "guest_spawned");
-    this.animateGuestToSeat(guest.id);
+    this.resumeGuestMovement();
+  }
+
+  clearSessionTimers() {
+    this.sessionTimers.forEach((timer) => timer.remove(false));
+    this.sessionTimers.clear();
+  }
+
+  syncSessionTimers() {
+    const activeIds = new Set(
+      this.state.guests
+        .filter(
+          (guest) =>
+            guest.state === "seated" &&
+            guest.session?.status === "playing"
+        )
+        .map((guest) => guest.id)
+    );
+
+    this.sessionTimers.forEach((timer, guestId) => {
+      if (!activeIds.has(guestId)) {
+        timer.remove(false);
+        this.sessionTimers.delete(guestId);
+      }
+    });
+
+    this.state.guests.forEach((guest) => {
+      if (
+        guest.state !== "seated" ||
+        guest.session?.status !== "playing" ||
+        this.sessionTimers.has(guest.id)
+      ) {
+        return;
+      }
+
+      const remaining = Math.max(1, Number(guest.session.endsAt || 0) - Date.now());
+      const timer = this.time.delayedCall(remaining, () => {
+        this.sessionTimers.delete(guest.id);
+        this.finishGuestSession(guest.id);
+      });
+
+      this.sessionTimers.set(guest.id, timer);
+    });
+  }
+
+  finishGuestSession(guestId) {
+    const before = this.state.guests.find((item) => item.id === guestId);
+    if (!before?.session) return;
+
+    const revenue = Number(before.session.revenue || 0);
+    const next = completeGuestSession(this.state, guestId, Date.now());
+    if (next === this.state) return;
+
+    const moverWasActive = Boolean(this.activeMover);
+    this.state = next;
+
+    if (!moverWasActive) {
+      this.renderAll();
+    }
+
+    this.callbacks.onStateChange?.(
+      this.getState(),
+      "guest_session_completed",
+      { guestId, revenue }
+    );
+
+    this.syncSessionTimers();
+
+    if (!moverWasActive) {
+      this.resumeGuestMovement();
+    }
   }
 
   buildBlockedSet(exceptGuestId) {
@@ -146,34 +245,56 @@ export class GameScene extends Phaser.Scene {
     return path.reverse();
   }
 
-  animateGuestToSeat(guestId) {
-    const guest = this.state.guests.find((item) => item.id === guestId);
-    if (!guest || guest.state !== "walking") return;
+  resumeGuestMovement() {
+    if (this.activeMover) return;
 
-    const sprite = this.guestSprites.get(guestId);
+    const guest =
+      this.state.guests.find((item) => item.state === "leaving") ||
+      this.state.guests.find((item) => item.state === "walking");
+
+    if (!guest) return;
+
+    if (guest.state === "leaving") {
+      this.animateGuestToExit(guest.id);
+    } else {
+      this.animateGuestToSeat(guest.id);
+    }
+  }
+
+  animateGuestPath(guestId, target, onArrive) {
+    const guest = this.state.guests.find((item) => item.id === guestId);
+    if (!guest) return;
+
+    let sprite = this.guestSprites.get(guestId);
+    if (!sprite) {
+      this.renderAll();
+      sprite = this.guestSprites.get(guestId);
+    }
     if (!sprite) return;
 
     const path = this.findPath(
       { x: guest.x, y: guest.y },
-      { x: guest.targetX, y: guest.targetY },
+      target,
       guest.id
     );
 
-    if (path.length === 1) {
-      this.state = seatGuest(this.state, guestId);
-      this.renderAll();
-      this.callbacks.onStateChange?.(this.getState(), "guest_seated");
+    if (!path.length) {
+      this.time.delayedCall(250, () => this.resumeGuestMovement());
       return;
     }
 
-    if (path.length < 2) return;
+    if (path.length === 1) {
+      onArrive();
+      return;
+    }
 
+    this.activeMover = guestId;
     let index = 1;
+
     const step = () => {
       if (index >= path.length) {
-        this.state = seatGuest(this.state, guestId);
-        this.renderAll();
-        this.callbacks.onStateChange?.(this.getState(), "guest_seated");
+        this.activeMover = null;
+        onArrive();
         return;
       }
 
@@ -198,6 +319,39 @@ export class GameScene extends Phaser.Scene {
     };
 
     step();
+  }
+
+  animateGuestToSeat(guestId) {
+    const guest = this.state.guests.find((item) => item.id === guestId);
+    if (!guest || guest.state !== "walking") return;
+
+    this.animateGuestPath(
+      guestId,
+      { x: guest.targetX, y: guest.targetY },
+      () => {
+        this.state = seatGuest(this.state, guestId, Date.now());
+        this.renderAll();
+        this.callbacks.onStateChange?.(this.getState(), "guest_seated", { guestId });
+        this.syncSessionTimers();
+        this.resumeGuestMovement();
+      }
+    );
+  }
+
+  animateGuestToExit(guestId) {
+    const guest = this.state.guests.find((item) => item.id === guestId);
+    if (!guest || guest.state !== "leaving") return;
+
+    this.animateGuestPath(
+      guestId,
+      { x: this.state.map.entrance.x, y: this.state.map.entrance.y },
+      () => {
+        this.state = removeDepartedGuest(this.state, guestId);
+        this.renderAll();
+        this.callbacks.onStateChange?.(this.getState(), "guest_departed", { guestId });
+        this.resumeGuestMovement();
+      }
+    );
   }
 
   handlePointer(pointer) {
@@ -329,11 +483,18 @@ export class GameScene extends Phaser.Scene {
 
     this.state.guests.forEach((guest) => {
       const point = this.tileCenter(guest.x, guest.y);
+      const fill =
+        guest.state === "leaving"
+          ? 0xb98b66
+          : guest.session?.status === "playing"
+            ? 0xe1a36c
+            : 0xd89a63;
+
       const sprite = this.add.circle(
         point.x,
         point.y,
         Math.max(4, tile * .17),
-        0xd89a63,
+        fill,
         1
       );
 
