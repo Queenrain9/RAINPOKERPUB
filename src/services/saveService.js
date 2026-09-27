@@ -1,4 +1,5 @@
 import { supabase } from "./supabase.js";
+import { createInitialPubState } from "../game/state.js";
 
 const NEW_ACCOUNT_STATE = Object.freeze({
   version: 1,
@@ -35,6 +36,11 @@ export async function ensureGameSave(userId) {
 
   if (error) throw error;
   return data;
+}
+
+export async function initializePubSave(userId, pubName) {
+  const initialGameState = createInitialPubState(pubName);
+  return saveGameState(userId, initialGameState, 1);
 }
 
 export async function loadGameSave(userId) {
