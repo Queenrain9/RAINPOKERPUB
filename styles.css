@@ -1,0 +1,216 @@
+:root {
+  font-family: -apple-system, BlinkMacSystemFont, "Pretendard", "Segoe UI", sans-serif;
+  color: #f7f0e4;
+  background: #100d0a;
+  font-synthesis: none;
+  --panel: rgba(24, 19, 15, 0.92);
+  --panel-soft: rgba(24, 19, 15, 0.72);
+  --gold: #d6a653;
+  --gold-strong: #efc36b;
+  --muted: #b9aa95;
+  --line: rgba(255, 255, 255, 0.11);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  min-height: 100%;
+  background: #100d0a;
+}
+
+body {
+  min-height: 100dvh;
+  overflow: hidden;
+}
+
+button, input { font: inherit; }
+
+button { -webkit-tap-highlight-color: transparent; }
+
+[hidden] { display: none !important; }
+
+.app-shell {
+  width: 100%;
+  min-height: 100dvh;
+  position: relative;
+  overflow: hidden;
+}
+
+.screen {
+  position: absolute;
+  inset: 0;
+  min-height: 100dvh;
+}
+
+.landing-screen {
+  display: grid;
+  place-items: end center;
+  background: #17110d;
+}
+
+.landing-game,
+.landing-game canvas {
+  position: absolute;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.landing-shade {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(10,8,6,.15) 0%, rgba(10,8,6,.25) 45%, rgba(10,8,6,.92) 82%, #100d0a 100%),
+    radial-gradient(circle at 50% 35%, transparent 0 20%, rgba(10,8,6,.28) 70%);
+  pointer-events: none;
+}
+
+.landing-content {
+  position: relative;
+  z-index: 2;
+  width: min(100%, 430px);
+  padding: 24px 24px max(36px, env(safe-area-inset-bottom));
+  text-align: center;
+}
+
+.brand-mark {
+  display: inline-grid;
+  place-items: center;
+  width: 58px;
+  height: 58px;
+  border: 1px solid rgba(239,195,107,.5);
+  border-radius: 16px;
+  color: var(--gold-strong);
+  font-weight: 800;
+  letter-spacing: .08em;
+  font-size: 14px;
+  backdrop-filter: blur(12px);
+  background: rgba(25,18,12,.62);
+  box-shadow: 0 12px 30px rgba(0,0,0,.28);
+}
+
+.brand-mark--small {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  margin-bottom: 18px;
+}
+
+h1 {
+  margin: 16px 0 6px;
+  font-size: clamp(36px, 10vw, 58px);
+  line-height: .94;
+  letter-spacing: -.045em;
+}
+
+.tagline {
+  margin: 12px 0 26px;
+  color: #d7c9b5;
+  font-size: 15px;
+}
+
+.primary-button,
+.text-button,
+.back-button {
+  border: 0;
+  cursor: pointer;
+}
+
+.primary-button {
+  width: 100%;
+  min-height: 54px;
+  border-radius: 17px;
+  background: linear-gradient(180deg, #efc36b, #c89038);
+  color: #20170c;
+  font-weight: 800;
+  box-shadow: 0 12px 28px rgba(0,0,0,.28);
+}
+
+.primary-button:disabled {
+  cursor: default;
+  opacity: .45;
+}
+
+.text-button {
+  min-height: 46px;
+  margin-top: 8px;
+  padding: 0 16px;
+  background: transparent;
+  color: #d6c8b5;
+}
+
+.auth-screen {
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    radial-gradient(circle at 50% 15%, rgba(129,81,35,.22), transparent 36%),
+    #100d0a;
+}
+
+.auth-card {
+  width: min(100%, 420px);
+  padding: 28px 22px;
+  border: 1px solid var(--line);
+  border-radius: 26px;
+  background: var(--panel);
+  box-shadow: 0 28px 70px rgba(0,0,0,.38);
+}
+
+.auth-card h2 {
+  margin: 0 0 24px;
+  font-size: 28px;
+}
+
+.auth-card form {
+  display: grid;
+  gap: 16px;
+}
+
+.auth-card label {
+  display: grid;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.auth-card input {
+  width: 100%;
+  min-height: 50px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  outline: none;
+  color: #fff8ec;
+  background: rgba(255,255,255,.055);
+}
+
+.auth-card input:focus {
+  border-color: rgba(239,195,107,.72);
+  box-shadow: 0 0 0 3px rgba(239,195,107,.1);
+}
+
+.auth-status {
+  min-height: 20px;
+  margin: -2px 0 0;
+  color: #e9cfa6;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.back-button {
+  position: absolute;
+  top: max(18px, env(safe-area-inset-top));
+  left: 18px;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  color: #f6ede0;
+  background: rgba(255,255,255,.065);
+  font-size: 22px;
+}
+
+@media (min-width: 700px) {
+  .landing-content { padding-bottom: 54px; }
+}
