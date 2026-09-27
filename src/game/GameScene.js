@@ -22,6 +22,10 @@ export class GameScene extends Phaser.Scene {
     this.renderAll();
 
     if (this.state.business.status === "open") {
+      const walkingGuests = this.state.guests.filter((guest) => guest.state === "walking");
+      walkingGuests.forEach((guest, index) => {
+        this.time.delayedCall(80 + index * 120, () => this.animateGuestToSeat(guest.id));
+      });
       this.startGuestLoop();
     }
   }
@@ -154,6 +158,13 @@ export class GameScene extends Phaser.Scene {
       { x: guest.targetX, y: guest.targetY },
       guest.id
     );
+
+    if (path.length === 1) {
+      this.state = seatGuest(this.state, guestId);
+      this.renderAll();
+      this.callbacks.onStateChange?.(this.getState(), "guest_seated");
+      return;
+    }
 
     if (path.length < 2) return;
 
