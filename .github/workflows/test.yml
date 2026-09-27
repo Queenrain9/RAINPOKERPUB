@@ -23,5 +23,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - name: Check browser module syntax
+        run: |
+          node --check src/app.js
+          node --check src/game/GameScene.js
+          node --check src/game/engine.js
+          node --check src/game/state.js
+          node --check src/game/balance.js
       - name: Run engine tests
         run: npm test
