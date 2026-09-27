@@ -186,7 +186,10 @@ function updateHUD() {
   hudPubName.textContent = currentState.pub?.name || "POKER PUB";
   hudCash.textContent = `${Number(currentState.economy?.cash || 0).toLocaleString("ko-KR")}G`;
   hudCalendar.textContent = `${currentState.calendar?.week || 1}주차 · ${currentState.calendar?.dayName || "월요일"}`;
-  hudStatus.textContent = currentState.business?.status === "open" ? "영업 중" : "영업 전";
+  const sessions = Number(currentState.business?.todayStats?.sessions || 0);
+  hudStatus.textContent = currentState.business?.status === "open"
+    ? `영업 중 · ${sessions}세션`
+    : "영업 전";
 }
 
 function tutorialMessageFor(state) {
@@ -201,10 +204,18 @@ function tutorialMessageFor(state) {
       return "모집한 딜러를 방금 만든 테이블에 배치해보세요. 테이블을 탭하세요.";
     case "tutorial_ready_to_open":
       return "영업 준비가 끝났습니다. 영업 시작을 눌러보세요.";
-    case "open":
+    case "open": {
+      const sessions = Number(state.business?.todayStats?.sessions || 0);
+      const revenue = Number(state.business?.todayStats?.revenue || 0);
+
+      if (sessions > 0) {
+        return `영업 중 · 오늘 ${sessions}세션 · 매출 ${revenue.toLocaleString("ko-KR")}G`;
+      }
+
       return state.guests?.length
-        ? "영업 중입니다. 손님들이 빈 좌석을 찾아 들어옵니다."
+        ? "영업 중입니다. 손님들이 실제 포커 세션을 플레이하고 있어요."
         : "1주차 월요일 영업을 시작했습니다. 첫 손님을 기다려보세요.";
+    }
     default:
       return "";
   }
@@ -280,17 +291,31 @@ async function flushSave() {
   }
 }
 
-function handleSceneStateChange(state, reason) {
+function handleSceneStateChange(state, reason, meta = {}) {
   currentState = JSON.parse(JSON.stringify(state));
   updateHUD();
   dirty = true;
 
-  if (reason === "guest_spawned" && currentState.guests.length === 1) {
+  if (reason === "guest_spawned" && currentState.counters?.guest === 1) {
     systemMessage.textContent = "첫 손님이 들어왔습니다. 빈 좌석을 찾아 이동하고 있어요.";
   }
 
-  if (reason === "guest_seated" && currentState.guests.length === 1) {
-    systemMessage.textContent = "첫 손님이 자리에 앉았습니다. 이제부터 실제 영업이 이어집니다.";
+  if (reason === "guest_seated") {
+    const firstGuest = currentState.counters?.guest === 1;
+    systemMessage.textContent = firstGuest
+      ? "첫 손님이 자리에 앉아 실제 포커 세션을 시작했습니다."
+      : "손님이 자리에 앉아 포커 세션을 시작했습니다.";
+  }
+
+  if (reason === "guest_session_completed") {
+    const revenue = Number(meta.revenue || 0);
+    const sessions = Number(currentState.business?.todayStats?.sessions || 0);
+    systemMessage.textContent = `세션 종료 · +${revenue.toLocaleString("ko-KR")}G · 오늘 ${sessions}세션`;
+    void flushSave();
+  }
+
+  if (reason === "guest_departed") {
+    refreshTutorialUI();
   }
 }
 
