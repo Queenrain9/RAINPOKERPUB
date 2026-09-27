@@ -31,3 +31,9 @@ export function mountLandingPreview() {
     },
   });
 }
+
+export function destroyLandingPreview() {
+  if (!previewGame) return;
+  previewGame.destroy(true);
+  previewGame = null;
+}
