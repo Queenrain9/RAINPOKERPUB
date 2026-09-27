@@ -1,3 +1,5 @@
+import { BALANCE } from "./balance.js";
+
 export const TABLE_MODULE = Object.freeze({
   width: 7,
   height: 4,
@@ -22,6 +24,26 @@ export const TABLE_MODULE = Object.freeze({
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
+}
+
+function ensureEconomyShape(state) {
+  state.economy ||= {};
+  state.economy.cash = Number(state.economy.cash || 0);
+  state.economy.lifetimeRevenue = Number(state.economy.lifetimeRevenue || 0);
+
+  state.business ||= { status: "closed" };
+  state.business.todayStats ||= { sessions: 0, revenue: 0 };
+  state.business.todayStats.sessions = Number(state.business.todayStats.sessions || 0);
+  state.business.todayStats.revenue = Number(state.business.todayStats.revenue || 0);
+}
+
+function makeSession(nowMs) {
+  return {
+    status: "playing",
+    startedAt: nowMs,
+    endsAt: nowMs + BALANCE.session.durationMs,
+    revenue: BALANCE.session.revenuePerGuest,
+  };
 }
 
 function tableSolidCells(table) {
@@ -169,6 +191,7 @@ export function openBusiness(state) {
   if (!canOpenBusiness(state)) throw new Error("NO_OPERATING_TABLE");
 
   const next = clone(state);
+  ensureEconomyShape(next);
   next.business.status = "open";
   next.phase = "open";
   next.calendar.week = 1;
@@ -198,7 +221,9 @@ export function getAvailableSeat(state) {
 
 export function spawnGuest(state) {
   if (state.business.status !== "open") return state;
-  if (state.guests.some((guest) => guest.state === "walking")) return state;
+  if (state.guests.some((guest) => guest.state === "walking" || guest.state === "leaving")) {
+    return state;
+  }
 
   const seat = getAvailableSeat(state);
   if (!seat) return state;
@@ -217,12 +242,13 @@ export function spawnGuest(state) {
     targetSeatIndex: seat.seatIndex,
     targetX: seat.x,
     targetY: seat.y,
+    session: null,
   });
 
   return next;
 }
 
-export function seatGuest(state, guestId) {
+export function seatGuest(state, guestId, nowMs = Date.now()) {
   const next = clone(state);
   const guest = next.guests.find((item) => item.id === guestId);
   if (!guest || guest.state !== "walking") return next;
@@ -231,10 +257,78 @@ export function seatGuest(state, guestId) {
   if (!table) return next;
   if (table.seatAssignments[guest.targetSeatIndex]) return next;
 
+  ensureEconomyShape(next);
   guest.state = "seated";
   guest.x = guest.targetX;
   guest.y = guest.targetY;
+  guest.session = makeSession(nowMs);
   table.seatAssignments[guest.targetSeatIndex] = guest.id;
+  return next;
+}
+
+export function ensureActiveGuestSessions(state, nowMs = Date.now()) {
+  let changed = false;
+  const next = clone(state);
+  ensureEconomyShape(next);
+
+  next.guests.forEach((guest) => {
+    if (guest.state === "seated" && (!guest.session || guest.session.status !== "playing")) {
+      guest.session = makeSession(nowMs);
+      changed = true;
+    }
+  });
+
+  const originalStats = state.business?.todayStats;
+  const originalLifetime = state.economy?.lifetimeRevenue;
+  if (!originalStats || originalLifetime === undefined) changed = true;
+
+  return changed ? next : state;
+}
+
+export function completeGuestSession(state, guestId, nowMs = Date.now()) {
+  const guest = state.guests.find((item) => item.id === guestId);
+  if (
+    !guest ||
+    guest.state !== "seated" ||
+    !guest.session ||
+    guest.session.status !== "playing"
+  ) {
+    return state;
+  }
+
+  const next = clone(state);
+  ensureEconomyShape(next);
+  const nextGuest = next.guests.find((item) => item.id === guestId);
+  const table = next.tables.find((item) => item.id === nextGuest.targetTableId);
+  const revenue = Number(nextGuest.session.revenue || BALANCE.session.revenuePerGuest);
+
+  if (
+    table &&
+    table.seatAssignments[nextGuest.targetSeatIndex] === nextGuest.id
+  ) {
+    table.seatAssignments[nextGuest.targetSeatIndex] = null;
+  }
+
+  nextGuest.session.status = "completed";
+  nextGuest.session.completedAt = nowMs;
+  nextGuest.state = "leaving";
+  nextGuest.targetX = next.map.entrance.x;
+  nextGuest.targetY = next.map.entrance.y;
+
+  next.economy.cash += revenue;
+  next.economy.lifetimeRevenue += revenue;
+  next.business.todayStats.sessions += 1;
+  next.business.todayStats.revenue += revenue;
+
+  return next;
+}
+
+export function removeDepartedGuest(state, guestId) {
+  const guest = state.guests.find((item) => item.id === guestId);
+  if (!guest || guest.state !== "leaving") return state;
+
+  const next = clone(state);
+  next.guests = next.guests.filter((item) => item.id !== guestId);
   return next;
 }
 
